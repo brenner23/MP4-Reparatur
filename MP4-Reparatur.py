@@ -31,7 +31,7 @@ from pathlib import Path
 from tkinter import filedialog, messagebox, ttk
 
 APP_NAME = "MP4-Reparatur"
-APP_VERSION = "1.0.0"
+APP_VERSION = "1.0.1"
 COPY_YEAR = "2026"
 
 NO_WINDOW = subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0
@@ -246,6 +246,7 @@ EN = {
     "Pause – {0} Dateien übrig. Beim nächsten Mal geht es an dieser Stelle weiter.":
         "Paused – {0} files left. Next time it continues from here.",
     "breche ab …": "cancelling …",
+    "Bereit – „Ordner analysieren“ klicken": "Ready – click “Analyse folder”",
 }
 
 
@@ -1300,7 +1301,7 @@ class App:
         if d:
             self.v_src.set(os.path.normpath(d))
             self.save()
-            self.start_analyze()
+            self.start_analyze()                      # aktiv gewählt → sofort analysieren (beim Start nicht)
 
     def open_dir(self, d):
         if d and os.path.isdir(d):
@@ -1375,8 +1376,9 @@ class App:
             first = not self.ffmpeg_ok
             self.ffmpeg_ok = True
             self.set_running(self.busy)
-            if first and os.path.isdir(self.v_src.get().strip()):
-                self.start_analyze()
+            # bewusst KEINE automatische Analyse: bei ganzen Laufwerken/NAS würde das ungefragt lange laufen
+            if first and not self.jobs and not self.busy:
+                self.lbl_file.configure(text=T("Bereit – „Ordner analysieren“ klicken"))
         elif state == "err":
             self.log(T("✖ {0} – ohne ffmpeg kann nichts umgewandelt werden.", text), "err")
 

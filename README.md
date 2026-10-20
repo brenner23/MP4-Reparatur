@@ -46,8 +46,8 @@ Ergebnis:
 | Datei | Was |
 |---|---|
 | `dist\MP4-Reparatur\MP4-Reparatur.exe` | sofort startbar, ohne Installation (Ordner mit `_internal`) |
-| `release\MP4-Reparatur_1.0.0_portable.zip` | derselbe Ordner als ZIP zum Weitergeben |
-| `release\MP4-Reparatur_1.0.0_Setup.exe` | Installer – **nur wenn [Inno Setup](https://jrsoftware.org/isdl.php) installiert ist** (optional) |
+| `release\MP4-Reparatur_1.0.1_portable.zip` | derselbe Ordner als ZIP zum Weitergeben |
+| `release\MP4-Reparatur_1.0.1_Setup.exe` | Installer – **nur wenn [Inno Setup](https://jrsoftware.org/isdl.php) installiert ist** (optional) |
 
 `build.bat onefile` baut stattdessen eine einzelne EXE. Die ist bequemer, wird von Windows Defender / SmartScreen
 aber häufiger als „unbekannt“ gemeldet – deshalb ist die Ordner-Variante der Standard.

@@ -27,7 +27,7 @@ setlocal enabledelayedexpansion
 cd /d "%~dp0"
 
 set "APP=MP4-Reparatur"
-set "VERSION=1.0.0"
+set "VERSION=1.0.1"
 set "PUBLISHER=Brenner23"
 set "MODE=onedir"
 if /i "%~1"=="onefile" set "MODE=onefile"
