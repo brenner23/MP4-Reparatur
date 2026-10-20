@@ -1,0 +1,15 @@
+# Build-Ergebnisse – es werden keine EXE-Dateien veröffentlicht
+build/
+dist/
+release/
+installer/
+*.spec
+*.exe
+*.zip
+
+# Python
+__pycache__/
+*.pyc
+
+# lokal geladenes ffmpeg (Start als Skript)
+_werkzeuge/
