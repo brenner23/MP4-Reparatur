@@ -31,7 +31,7 @@ from pathlib import Path
 from tkinter import filedialog, messagebox, ttk
 
 APP_NAME = "MP4-Reparatur"
-APP_VERSION = "1.0.1"
+APP_VERSION = "1.0.2"
 COPY_YEAR = "2026"
 
 NO_WINDOW = subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0
@@ -182,7 +182,7 @@ EN = {
     "Quellordner nicht gefunden:\n{0}": "Source folder not found:\n{0}",
     "Das ist ein Fertig- bzw. Original-Ordner – bitte den Ordner mit den zu reparierenden Videos wählen.":
         "That is a finished or originals folder – please choose the folder with the videos to repair.",
-    "Ziel geändert – bitte neu analysieren": "Target changed – please analyse again",
+    "↻ Neu analysieren": "↻ Analyse again",
     "Es läuft noch eine Reparatur.\nWirklich beenden?": "A repair is still running.\nQuit anyway?",
     "Bitte warten, bis die Reparatur fertig ist – dann kann die Sprache umgestellt werden.":
         "Please wait until the repair has finished – then the language can be switched.",
@@ -1213,6 +1213,14 @@ class App:
 
     def on_src_changed(self):
         self.s["fertig_dir"] = ""                     # neuer Quellordner → Ziel wieder automatisch
+        if self.jobs and not self.busy:               # Liste gehört zum alten Ordner
+            self.jobs = []
+            self.tree.delete(*self.tree.get_children())
+            self.lbl_summary.configure(text="")
+            self.lbl_count.configure(text="")
+            self.btn_analyze.configure(text=T("Ordner analysieren"))
+            self.set_running(False)
+            self.show_estimate()
         self.update_target()
 
     def set_mode(self, mode, keep_jobs=False):
@@ -1221,11 +1229,8 @@ class App:
         self.btn_m_fertig.set_selected(mode == "fertig")
         self.btn_m_repl.set_selected(mode == "replace")
         self.update_target()
-        if self.jobs and not self.busy and not keep_jobs and changed:
-            self.lbl_summary.configure(text=T("Ziel geändert – bitte neu analysieren"))
-            self.jobs = []
-            self.tree.delete(*self.tree.get_children())
-            self.set_running(False)
+        if changed and not keep_jobs:
+            self.reclassify()                         # Analyse bleibt, nur Ziel/Status neu
         self.save()
 
     def update_target(self):
@@ -1286,6 +1291,7 @@ class App:
             self.s["fertig_dir"] = d
             self.update_target()
             self.save()
+            self.reclassify()                         # neues Ziel → „schon fertig?“ neu prüfen
 
     def check_dir_conflict(self, d):
         src = self.src_path()
@@ -1502,32 +1508,55 @@ class App:
         return (str(job["rel"]), fmt, f"{a['w']}×{a['h']}" if a["w"] else "",
                 f"{a['fps']:.0f}" if a["fps"] else "", befund, T(job["state"]))
 
-    def on_analyze_row(self, job, i, n):
-        a = job["ana"]
-        self.jobs.append(job)
+    def classify(self, job):
+        """Ziel, Status und „zu tun?“ einer Datei nach den aktuellen Einstellungen (Ziel-Art, Schalter).
+        Die Analyse selbst hängt nicht davon ab – beim Umschalten wird nur das hier neu berechnet."""
+        a, mode = job["ana"], self.s["mode"]
+        job.update(mode=mode, todo=True, name_taken=False)
+        job["out"] = (Path(self.fertig_dir()) / job["rel"].with_suffix(".mp4") if mode == "fertig"
+                      else job["src"].with_suffix(".mp4"))
         if a["error"]:
-            job.update(state="Fehler", todo=False)
-            tag = "err"
-        else:
-            tag = "ok" if a["ok"] else "prob"
-            action = "H.265 umwandeln" if not a["v_copy"] else "neu verpacken"
-            if job["mode"] == "replace":
-                if a["ok"]:
-                    job.update(state="schon gut", todo=False)
-                elif job["out"] != job["src"] and job["out"].exists():
-                    job.update(state="Name belegt", todo=False, name_taken=True)
-                    tag = "err"
-                else:
-                    job["state"] = action
-            elif self.v_skip.get() and job["out"].exists():
-                job.update(state="schon fertig", todo=False)
-                tag = "skip"
-            elif a["ok"]:
-                job.update(state="kopieren" if self.v_copy.get() else "auslassen", todo=self.v_copy.get())
+            job.update(state="Fehler", todo=False, tag="err")
+            return
+        tag = "ok" if a["ok"] else "prob"
+        action = "H.265 umwandeln" if not a["v_copy"] else "neu verpacken"
+        if mode == "replace":
+            if a["ok"]:
+                job.update(state="schon gut", todo=False)
+            elif job["out"] != job["src"] and job["out"].exists():
+                job.update(state="Name belegt", todo=False, name_taken=True)
+                tag = "err"
             else:
                 job["state"] = action
+        elif self.v_skip.get() and job["out"].exists():
+            job.update(state="schon fertig", todo=False)
+            tag = "skip"
+        elif a["ok"]:
+            job.update(state="kopieren" if self.v_copy.get() else "auslassen", todo=self.v_copy.get())
+        else:
+            job["state"] = action
         job["tag"] = tag
-        job["iid"] = self.tree.insert("", "end", values=self.row_values(job), tags=(tag,))
+
+    def reclassify(self):
+        """Nach Wechsel von Ziel/Fertig-Ordner/Schaltern: Liste behalten, nur Status neu – keine neue Analyse."""
+        if not self.jobs or self.busy:
+            return
+        for j in self.jobs:
+            if j.get("hidden") or j.get("tag") == "done":   # schon erledigt → bleibt erledigt
+                continue
+            self.classify(j)
+            if "iid" in j and self.tree.exists(j["iid"]):
+                self.tree.item(j["iid"], values=self.row_values(j), tags=(j["tag"],))
+        self.summary_texts()
+        self.show_hidden_count()
+        self.lbl_file.configure(text=T("Bereit") if any(j["todo"] for j in self.jobs) else T("Nichts zu tun"))
+        self.set_running(False)
+        self.show_estimate()
+
+    def on_analyze_row(self, job, i, n):
+        self.jobs.append(job)
+        self.classify(job)
+        job["iid"] = self.tree.insert("", "end", values=self.row_values(job), tags=(job["tag"],))
         el = time.time() - self.t_start
         self.eta = time.time() + el / i * (n - i)
         self.pb_total.set(i / n)
@@ -1546,6 +1575,7 @@ class App:
         self.lbl_count.configure(text=T("{0} Dateien · {1}", n, fmt_size(size)))
         self.lbl_summary.configure(text=T("{0} mit Problemen · {1} zu erledigen · Spielzeit {2}",
                                           prob, len(todo), fmt_time(dur)))
+        self.btn_analyze.configure(text=T("↻ Neu analysieren"))   # Liste da → Knopf lädt denselben Ordner neu
         return n, prob, todo
 
     def on_analyze_done(self):
@@ -1732,6 +1762,7 @@ class App:
 
     def on_switch(self):
         self.save()
+        self.reclassify()                             # „überspringen“/„mitkopieren“ ändern den Status
         self.show_estimate()
 
     # ── Umwandeln ────────────────────────────────────────────────────────────
